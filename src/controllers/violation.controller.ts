@@ -1,38 +1,70 @@
-import { injectable, inject } from 'inversify';
-import Router from 'koa-router';
-import { TYPES } from '../types';
-import { ViolationService } from '../services/violation.service';
-import { Context } from 'koa';
+import { injectable, inject } from "inversify";
+import { Context } from "koa";
+import { ViolationService } from "../services/violation.service";
+import { TYPES } from "../types";
 
 @injectable()
 export class ViolationController {
-  public router: Router;
+  constructor(@inject(TYPES.ViolationService) private violationService: ViolationService) {}
 
-  constructor(@inject(TYPES.ViolationService) private violationService: ViolationService) {
-    this.router = new Router({ prefix: '/violations' });
-
-    this.router.get('/', this.getViolations.bind(this));
-    this.router.post('/', this.createViolation.bind(this));
-  }
-
-  async getViolations(ctx: Context) {
+  async findAll(ctx: Context) {
     try {
-      const violations = await this.violationService.getAll();
+      const violations = await this.violationService.findAll();
       ctx.body = violations;
-    } catch (err) {
+    } catch (err: unknown) {
       ctx.status = 500;
-      ctx.body = { error: err.message };
+      ctx.body = { message: (err as Error).message || "Error fetching violations" };
     }
   }
 
-  async createViolation(ctx: Context) {
+  async findOne(ctx: Context) {
     try {
-      const violation = await this.violationService.create(ctx.request.body);
+      const { id } = ctx.params;
+      const violation = await this.violationService.findOne(id);
+      if (!violation) {
+        ctx.status = 404;
+        ctx.body = { message: "Violation not found" };
+        return;
+      }
+      ctx.body = violation;
+    } catch (err: unknown) {
+      ctx.status = 500;
+      ctx.body = { message: (err as Error).message || "Error fetching violation" };
+    }
+  }
+
+  async create(ctx: Context) {
+    try {
+      const data = ctx.request.body;
+      const violation = await this.violationService.create(data);
       ctx.status = 201;
       ctx.body = violation;
-    } catch (err) {
+    } catch (err: unknown) {
       ctx.status = 500;
-      ctx.body = { error: err.message };
+      ctx.body = { message: (err as Error).message || "Error creating violation" };
+    }
+  }
+
+  async update(ctx: Context) {
+    try {
+      const { id } = ctx.params;
+      const data = ctx.request.body;
+      const updatedViolation = await this.violationService.update(id, data);
+      ctx.body = updatedViolation;
+    } catch (err: unknown) {
+      ctx.status = 500;
+      ctx.body = { message: (err as Error).message || "Error updating violation" };
+    }
+  }
+
+  async delete(ctx: Context) {
+    try {
+      const { id } = ctx.params;
+      await this.violationService.delete(id);
+      ctx.status = 204;
+    } catch (err: unknown) {
+      ctx.status = 500;
+      ctx.body = { message: (err as Error).message || "Error deleting violation" };
     }
   }
 }

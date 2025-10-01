@@ -1,54 +1,73 @@
-import { Context } from 'koa';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import User from '../models/user.schema';
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
+import { injectable, inject } from "inversify";
+import { Context } from "koa";
+import { UserService } from "../services/user.service";
+import { TYPES } from "../types";
+import jwt from "jsonwebtoken";
 
-export const register = async (ctx: Context) => {
-  try {
-    const { name, email, password } = ctx.request.body;
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      ctx.status = 400;
-      ctx.body = { message: 'User already exists' };
-      return;
+@injectable()
+export class AuthController {
+  constructor(@inject(TYPES.UserService) private userService: UserService) {}
+
+  async register(ctx: Context) {
+    try {
+      const { name, email, password } = ctx.request.body as {
+        name: string;
+        email: string;
+        password: string;
+      };
+
+      if (!name || !email || !password) {
+        ctx.status = 400;
+        ctx.body = { message: "Fill all fields" };
+        return;
+      }
+
+      const existingUser = await this.userService.findByEmail(email);
+      if (existingUser) {
+        ctx.status = 400;
+        ctx.body = { message: "User already exists" };
+        return;
+      }
+
+      const newUser = await this.userService.create({ name, email, password });
+
+      const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET || "secret", {
+        expiresIn: "7d",
+      });
+
+      ctx.status = 201;
+      ctx.body = { token, user: newUser };
+    } catch (err: unknown) {
+      ctx.status = 500;
+      ctx.body = { message: (err as Error).message || "Registration error" };
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ name, email, password: hashedPassword });
-    await user.save();
-
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-
-    ctx.body = { token, user: { _id: user._id, name: user.name, email: user.email } };
-  } catch (error) {
-    ctx.status = 500;
-    ctx.body = { message: 'Registration error', error };
   }
-};
 
-export const login = async (ctx: Context) => {
-  try {
-    const { email, password } = ctx.request.body;
-    const user = await User.findOne({ email });
-    if (!user) {
-      ctx.status = 400;
-      ctx.body = { message: 'Invalid email or password' };
-      return;
+  async login(ctx: Context) {
+    try {
+      const { email, password } = ctx.request.body as { email: string; password: string };
+
+      if (!email || !password) {
+        ctx.status = 400;
+        ctx.body = { message: "Fill all fields" };
+        return;
+      }
+
+      const user = await this.userService.findByEmail(email);
+      if (!user || !(await this.userService.comparePassword(user, password))) {
+        ctx.status = 400;
+        ctx.body = { message: "Invalid credentials" };
+        return;
+      }
+
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "secret", {
+        expiresIn: "7d",
+      });
+
+      ctx.body = { token, user };
+    } catch (err: unknown) {
+      ctx.status = 500;
+      ctx.body = { message: (err as Error).message || "Login error" };
     }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      ctx.status = 400;
-      ctx.body = { message: 'Invalid email or password' };
-      return;
-    }
-
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-
-    ctx.body = { token, user: { _id: user._id, name: user.name, email: user.email } };
-  } catch (error) {
-    ctx.status = 500;
-    ctx.body = { message: 'Login error', error };
   }
-};
+}

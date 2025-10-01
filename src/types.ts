@@ -6,4 +6,6 @@ export const TYPES = {
   ViolationService: Symbol.for('ViolationService'),
   ViolationController: Symbol.for('ViolationController'),
   ViolationRepository: Symbol.for('ViolationRepository'),
+
+  AuthController: Symbol.for('AuthController'),
 };
