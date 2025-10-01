@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: i18n-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
